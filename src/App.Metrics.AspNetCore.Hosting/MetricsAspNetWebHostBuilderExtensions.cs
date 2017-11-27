@@ -4,8 +4,10 @@
 
 using System;
 using App.Metrics;
+using App.Metrics.AspNetCore.Hosting;
 using App.Metrics.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 
 // ReSharper disable CheckNamespace
 namespace Microsoft.AspNetCore.Hosting
@@ -16,35 +18,29 @@ namespace Microsoft.AspNetCore.Hosting
     /// </summary>
     public static class MetricsAspNetWebHostBuilderExtensions
     {
-        private static bool _metricsBuilt;
-
         public static IWebHostBuilder ConfigureMetricsWithDefaults(
             this IWebHostBuilder hostBuilder,
             Action<WebHostBuilderContext, IMetricsBuilder> configureMetrics)
         {
-            if (_metricsBuilt)
-            {
-                throw new InvalidOperationException("MetricsBuilder allows creation only of a single instance of IMetrics");
-            }
-
-            return hostBuilder.ConfigureServices(
+            hostBuilder.ConfigureServices(
                 (context, services) =>
                 {
-                    var metricsBuilder = AppMetrics.CreateDefaultBuilder();
-                    configureMetrics(context, metricsBuilder);
-                    metricsBuilder.Configuration.ReadFrom(context.Configuration);
-                    services.AddMetrics(metricsBuilder);
-                    _metricsBuilt = true;
+                    var serviceProvider = services.BuildServiceProvider();
+                    if (serviceProvider.GetService(typeof(MetricsMarkerService)) == null)
+                    {
+                        var metricsBuilder = AppMetrics.CreateDefaultBuilder();
+                        configureMetrics(context, metricsBuilder);
+                        metricsBuilder.Configuration.ReadFrom(context.Configuration);
+                        services.AddMetrics(metricsBuilder);
+                        services.TryAddSingleton<MetricsMarkerService, MetricsMarkerService>();
+                    }
                 });
+
+            return hostBuilder;
         }
 
         public static IWebHostBuilder ConfigureMetricsWithDefaults(this IWebHostBuilder hostBuilder, Action<IMetricsBuilder> configureMetrics)
         {
-            if (_metricsBuilt)
-            {
-                throw new InvalidOperationException("MetricsBuilder allows creation only of a single instance of IMetrics");
-            }
-
             hostBuilder.ConfigureMetricsWithDefaults(
                 (context, builder) =>
                 {
@@ -56,16 +52,15 @@ namespace Microsoft.AspNetCore.Hosting
 
         public static IWebHostBuilder ConfigureMetrics(this IWebHostBuilder hostBuilder, IMetricsRoot metrics)
         {
-            if (_metricsBuilt)
-            {
-                throw new InvalidOperationException("MetricsBuilder allows creation only of a single instance of IMetrics");
-            }
-
             return hostBuilder.ConfigureServices(
                 (context, services) =>
                 {
-                    services.AddMetrics(metrics);
-                    _metricsBuilt = true;
+                    var serviceProvider = services.BuildServiceProvider();
+                    if (serviceProvider.GetService(typeof(MetricsMarkerService)) == null)
+                    {
+                        services.AddMetrics(metrics);
+                        services.TryAddSingleton<MetricsMarkerService, MetricsMarkerService>();
+                    }
                 });
         }
 
@@ -73,31 +68,25 @@ namespace Microsoft.AspNetCore.Hosting
             this IWebHostBuilder hostBuilder,
             Action<WebHostBuilderContext, IMetricsBuilder> configureMetrics)
         {
-            if (_metricsBuilt)
-            {
-                throw new InvalidOperationException("MetricsBuilder allows creation only of a single instance of IMetrics");
-            }
-
             return hostBuilder.ConfigureServices(
                 (context, services) =>
                 {
-                    services.AddMetrics(
-                        builder =>
-                        {
-                            configureMetrics(context, builder);
-                            builder.Configuration.ReadFrom(context.Configuration);
-                            _metricsBuilt = true;
-                        });
+                    var serviceProvider = services.BuildServiceProvider();
+                    if (serviceProvider.GetService(typeof(MetricsMarkerService)) == null)
+                    {
+                        services.AddMetrics(
+                            builder =>
+                            {
+                                configureMetrics(context, builder);
+                                builder.Configuration.ReadFrom(context.Configuration);
+                            });
+                        services.TryAddSingleton<MetricsMarkerService, MetricsMarkerService>();
+                    }
                 });
         }
 
         public static IWebHostBuilder ConfigureMetrics(this IWebHostBuilder hostBuilder, Action<IMetricsBuilder> configureMetrics)
         {
-            if (_metricsBuilt)
-            {
-                throw new InvalidOperationException("MetricsBuilder allows creation only of a single instance of IMetrics");
-            }
-
             hostBuilder.ConfigureMetrics(
                 (context, builder) =>
                 {
@@ -109,20 +98,15 @@ namespace Microsoft.AspNetCore.Hosting
 
         public static IWebHostBuilder ConfigureMetrics(this IWebHostBuilder hostBuilder)
         {
-            if (_metricsBuilt)
-            {
-                return hostBuilder;
-            }
-
             return hostBuilder.ConfigureServices(
                 (context, services) =>
                 {
-                    if (!_metricsBuilt)
+                    var serviceProvider = services.BuildServiceProvider();
+                    if (serviceProvider.GetService(typeof(MetricsMarkerService)) == null)
                     {
-                        var builder = AppMetrics.CreateDefaultBuilder()
-                            .Configuration.ReadFrom(context.Configuration);
+                        var builder = AppMetrics.CreateDefaultBuilder().Configuration.ReadFrom(context.Configuration);
                         services.AddMetrics(builder);
-                        _metricsBuilt = true;
+                        services.TryAddSingleton<MetricsMarkerService, MetricsMarkerService>();
                     }
                 });
         }
